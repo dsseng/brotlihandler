@@ -15,8 +15,11 @@ import (
 // the data using Brotli when client supports it
 func BrotliHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Vary", "Accept-Encoding")
+
 		if acceptsBr(r) {
-			w.Header().Set("Vary", "Accept-Encoding")
+			w.Header().Set("Content-Encoding", "br")
+
 			bw := brotli.NewWriter(w)
 			brResponseWriter := &BrotliResponseWriter{
 				responseWriter: w,
@@ -24,7 +27,12 @@ func BrotliHandler(h http.Handler) http.Handler {
 			}
 			defer brResponseWriter.Close()
 
-			h.ServeHTTP(brResponseWriter, r)
+			if _, ok := w.(http.CloseNotifier); ok {
+				cnResponseWriter := BrotliResponseWriterWithCloseNotify{brResponseWriter}
+				h.ServeHTTP(cnResponseWriter, r)
+			} else {
+				h.ServeHTTP(brResponseWriter, r)
+			}
 		} else {
 			h.ServeHTTP(w, r)
 		}
@@ -160,7 +168,6 @@ func (w *BrotliResponseWriter) WriteHeader(c int) {
 // possible to maximize compatibility.
 func (w *BrotliResponseWriter) Write(b []byte) (int, error) {
 	h := w.responseWriter.Header()
-	h.Add("Content-Encoding", "br")
 	if h.Get("Content-Type") == "" {
 		h.Set("Content-Type", http.DetectContentType(b))
 	}
@@ -211,6 +218,10 @@ func (w *BrotliResponseWriter) Close() error {
 	return w.brotliWriter.Close()
 }
 
+type BrotliResponseWriterWithCloseNotify struct {
+	*BrotliResponseWriter
+}
+
 // CloseNotify returns a channel that receives at most a
 // single value (true) when the client connection has gone
 // away.
@@ -229,6 +240,6 @@ func (w *BrotliResponseWriter) Close() error {
 // enabled in browsers and not seen often in the wild. If this
 // is a problem, use HTTP/2 or only use CloseNotify on methods
 // such as POST.
-func (w *BrotliResponseWriter) CloseNotify() <-chan bool {
+func (w *BrotliResponseWriterWithCloseNotify) CloseNotify() <-chan bool {
 	return w.responseWriter.(http.CloseNotifier).CloseNotify()
 }
