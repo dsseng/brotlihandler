@@ -16,6 +16,7 @@ import (
 func BrotliHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if acceptsBr(r) {
+			w.Header().Set("Vary", "Accept-Encoding")
 			bw := brotli.NewWriter(w)
 			brResponseWriter := &BrotliResponseWriter{
 				responseWriter: w,
