@@ -28,8 +28,8 @@ import "net/http"
 //
 // Push returns ErrNotSupported if the client has disabled push or if push
 // is not supported on the underlying connection.
-func (w *BrotliResponseWriter) Push(target string, opts *http.PushOptions) error {
-	pusher, ok := w.responseWriter.(http.Pusher)
+func (w *compressResponseWriter) Push(target string, opts *http.PushOptions) error {
+	pusher, ok := w.ResponseWriter.(http.Pusher)
 	if ok && pusher != nil {
 		return pusher.Push(target, setAcceptEncodingForPushOptions(opts))
 	}
@@ -40,7 +40,7 @@ func setAcceptEncodingForPushOptions(opts *http.PushOptions) *http.PushOptions {
 	if opts == nil {
 		opts = &http.PushOptions{
 			Header: http.Header{
-				"Accept-Encoding": []string{"br"},
+				"Accept-Encoding": []string{"br", "gzip"},
 			},
 		}
 		return opts
@@ -48,13 +48,13 @@ func setAcceptEncodingForPushOptions(opts *http.PushOptions) *http.PushOptions {
 
 	if opts.Header == nil {
 		opts.Header = http.Header{
-			"Accept-Encoding": []string{"br"},
+			"Accept-Encoding": []string{"br", "gzip"},
 		}
 		return opts
 	}
 
 	if encoding := opts.Header.Get("Accept-Encoding"); encoding == "" {
-		opts.Header.Add("Accept-Encoding", "br")
+		opts.Header.Add("Accept-Encoding", "br,gzip")
 		return opts
 	}
 
