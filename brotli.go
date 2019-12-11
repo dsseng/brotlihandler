@@ -82,7 +82,7 @@ func (w *compressResponseWriter) Flush() {
 	}
 }
 
-// CompressHandler gzip compresses HTTP responses for clients that support it
+// CompressHandler gzip/brotli compresses HTTP responses for clients that support it
 // via the 'Accept-Encoding' header.
 //
 // Compressing TLS traffic may leak the page contents to an attacker if the
@@ -91,7 +91,7 @@ func CompressHandler(h http.Handler) http.Handler {
 	return CompressHandlerLevel(h, 6)
 }
 
-// CompressHandlerLevel gzip compresses HTTP responses with specified compression level
+// CompressHandlerLevel gzip/brotli compresses HTTP responses with specified compression level
 // for clients that support it via the 'Accept-Encoding' header.
 //
 // The compression level should be valid for encodings you use
