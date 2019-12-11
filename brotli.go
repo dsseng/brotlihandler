@@ -93,7 +93,6 @@ func parseCoding(s string) (coding string, qvalue float64, err error) {
 type BrotliResponseWriter struct {
 	responseWriter http.ResponseWriter
 	brotliWriter   brotli.Writer
-	minSize        int // minumum response size which will be compressed
 }
 
 // Header returns the header map that will be sent by
