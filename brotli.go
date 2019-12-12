@@ -20,22 +20,32 @@ const (
 )
 
 type compressResponseWriter struct {
-	io.Writer
+	Writer io.WriteCloser
 	http.ResponseWriter
 	http.Hijacker
 	http.Flusher
 	http.CloseNotifier
 	encoding string
 	level    int
+	code     int
 }
 
 func (w *compressResponseWriter) WriteHeader(c int) {
 	w.ResponseWriter.Header().Del("Content-Length")
-	w.ResponseWriter.WriteHeader(c)
+	if w.code == 0 {
+		w.code = c
+	}
 }
 
 func (w *compressResponseWriter) Header() http.Header {
 	return w.ResponseWriter.Header()
+}
+
+func (w *compressResponseWriter) writeHeader() {
+	if w.code != 0 {
+		w.ResponseWriter.WriteHeader(w.code)
+		w.code = 0
+	}
 }
 
 func (w *compressResponseWriter) Write(b []byte) (int, error) {
@@ -46,29 +56,31 @@ func (w *compressResponseWriter) Write(b []byte) (int, error) {
 	h.Del("Content-Length")
 
 	e := h.Get("Content-Encoding")
-	if len(b) < 1400 || e == brEncoding || e == gzipEncoding || e == deflateEncoding { // Don't compress short pieces of data since it won't improve performance. Ignore compressed data too
+	// Don't compress short pieces of data since it won't improve performance. Ignore compressed data too
+	if len(b) < 1400 || e == brEncoding || e == gzipEncoding || e == deflateEncoding {
+		w.writeHeader()
 		return w.ResponseWriter.Write(b)
 	}
 
 	h.Set("Content-Encoding", w.encoding)
+	w.writeHeader()
 
-	var encWriter io.WriteCloser
 	if w.encoding == brEncoding {
 		if w.level < brotli.BestSpeed || w.level > brotli.BestCompression {
 			w.level = brotli.DefaultCompression
 		}
 
-		encWriter = brotli.NewWriterLevel(w, w.level)
+		w.Writer = brotli.NewWriterLevel(w, w.level)
 	} else {
 		if w.level < gzip.HuffmanOnly || w.level > gzip.BestCompression {
 			w.level = gzip.DefaultCompression
 		}
 
-		encWriter, _ = gzip.NewWriterLevel(w, w.level)
+		w.Writer, _ = gzip.NewWriterLevel(w, w.level)
 	}
-	defer encWriter.Close()
+	defer w.Writer.Close()
 
-	return encWriter.Write(b)
+	return w.Writer.Write(b)
 }
 
 type flusher interface {
@@ -77,9 +89,11 @@ type flusher interface {
 
 func (w *compressResponseWriter) Flush() {
 	// Flush compressed data if compressor supports it.
-	if f, ok := w.Writer.(flusher); ok {
-		f.Flush()
+	f, ok := w.Writer.(flusher)
+	if !ok {
+		return
 	}
+	f.Flush()
 	// Flush HTTP response.
 	if w.Flusher != nil {
 		w.Flusher.Flush()
